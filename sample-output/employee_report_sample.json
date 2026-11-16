@@ -1,0 +1,9 @@
+
+{
+    "source_file": "employee_report_sample.txt",
+    "input_bucket": "serverless-input-2026",
+    "input_key": "sample-data/employee_report_sample.txt",
+    "line_count": 4,
+    "word_count": 12,
+    "status": "SUCCESS"
+}
