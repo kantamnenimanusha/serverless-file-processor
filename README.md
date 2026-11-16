@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/AWS-Lambda-orange?logo=awslambda" />
   <img src="https://img.shields.io/badge/Language-Python-blue?logo=python" />
   <img src="https://img.shields.io/badge/Monitoring-CloudWatch-purple?logo=amazoncloudwatch" />
-  <img src="https://img.shields.io/badge/Status-Implemented-success" />
+  <img src="https://img.shields.io/badge/Testing-5%20Tests%20Passing-success" />
 </p>
 
 ---
@@ -24,7 +24,7 @@ The Lambda function retrieves the uploaded file, processes its contents using Py
 
 The application uses AWS-managed serverless infrastructure, eliminating the need to provision or maintain dedicated servers for the processing workflow.
 
-This project demonstrates practical implementation of AWS serverless services, event-driven architecture, IAM permissions, Python automation and CloudWatch logging.
+This project demonstrates practical implementation of AWS serverless services, event-driven architecture, IAM permissions, Python automation, input validation, automated testing and CloudWatch logging.
 
 ## 🎯 Project Objectives
 
@@ -32,9 +32,10 @@ This project demonstrates practical implementation of AWS serverless services, e
 - Configure Amazon S3 event notifications to trigger AWS Lambda.
 - Process text files using Python and the Boto3 SDK.
 - Generate structured JSON reports automatically.
+- Implement input validation and exception handling.
 - Implement IAM-based access control using an execution role.
 - Monitor Lambda executions through Amazon CloudWatch.
-- Understand how AWS serverless services integrate in a real-world workflow.
+- Write automated tests for valid and invalid inputs.
 
 ## 🏗️ System Architecture
 
@@ -47,7 +48,7 @@ flowchart TD
     A["📄 Text File Upload"] --> B["Amazon S3 Input Bucket"]
     B -->|"ObjectCreated Event (.txt)"| C["AWS Lambda Function"]
     C -->|"GetObject"| B
-    C --> D["Python File Processing"]
+    C --> D["Input Validation and File Processing"]
     D --> E["Word Count and Line Count"]
     E --> F["Generate JSON Report"]
     F --> G["Amazon S3 Output Bucket"]
@@ -60,11 +61,13 @@ flowchart TD
 1. **File Upload:** A user uploads a `.txt` file to the designated input S3 bucket.
 2. **Event Detection:** Amazon S3 detects the object creation event.
 3. **Lambda Invocation:** S3 automatically invokes the configured Lambda function.
-4. **File Retrieval:** Lambda uses Boto3 and its IAM execution role to retrieve the uploaded object.
-5. **Content Analysis:** Python reads the file and calculates its word count and line count.
-6. **Report Generation:** The function creates a JSON report containing the source file details and processing results.
-7. **Output Storage:** The generated JSON report is uploaded to a separate S3 output bucket under the `processed/` prefix.
-8. **Monitoring:** Execution details and processing messages are recorded in Amazon CloudWatch Logs.
+4. **Input Validation:** Lambda validates the incoming event structure and checks the file extension.
+5. **File Retrieval:** Lambda uses Boto3 and its IAM execution role to retrieve the uploaded object.
+6. **Content Validation:** The function checks whether the file content can be decoded using UTF-8.
+7. **Content Analysis:** Python calculates the word count and line count.
+8. **Report Generation:** The function creates a JSON report containing the source file details and processing results.
+9. **Output Storage:** The generated JSON report is uploaded to a separate S3 output bucket under the `processed/` prefix.
+10. **Monitoring:** Execution details, processing messages and errors are recorded in Amazon CloudWatch Logs.
 
 ## 🛠️ AWS Services and Technologies
 
@@ -72,7 +75,7 @@ flowchart TD
 |---|---|
 | Amazon S3 | Stores uploaded text files and generated JSON reports |
 | AWS Lambda | Executes the processing function automatically |
-| Python | Implements file reading and processing logic |
+| Python | Implements file reading, validation and processing logic |
 | Boto3 | Enables Python interaction with AWS services |
 | AWS IAM | Controls Lambda permissions to access AWS resources |
 | Amazon CloudWatch | Collects Lambda execution logs for monitoring and troubleshooting |
@@ -139,51 +142,48 @@ Security considerations:
 
 The Lambda function is implemented in `lambda_function.py`.
 
-Its main operations are:
+Its main responsibilities include:
 
 1. Initialize the Boto3 S3 client.
 2. Read the destination bucket name from the environment variable.
-3. Extract the S3 bucket name and object key from the incoming event.
-4. Retrieve the uploaded text file using `get_object()`.
-5. Calculate the number of lines and words.
-6. Generate a JSON report.
-7. Upload the report using `put_object()`.
+3. Validate the incoming S3 event structure.
+4. Extract the S3 bucket name and object key.
+5. Validate the `.txt` file extension.
+6. Retrieve the uploaded file using `get_object()`.
+7. Decode the content using UTF-8.
+8. Calculate the number of lines and words.
+9. Generate a JSON report.
+10. Upload the report using `put_object()`.
 
-### Core Processing Logic
+### Input Validation and Error Handling
 
-```python
-response = s3.get_object(
-    Bucket=input_bucket,
-    Key=file_key
-)
+The implementation includes:
 
-file_content = response["Body"].read().decode("utf-8")
+- Validation of the incoming event and S3 record structure.
+- Checks for missing bucket details and object keys.
+- File extension validation to accept `.txt` files only.
+- UTF-8 decoding validation.
+- Clear error messages for unsupported file types and invalid file encodings.
+- Structured logging through Python's `logging` module.
+- Exception logging with traceback information.
+- Re-raising exceptions so failed processing is reported to Lambda.
 
-line_count = len(file_content.splitlines())
-word_count = len(file_content.split())
+The S3 object key is decoded using `unquote_plus()` to handle URL-encoded object keys.
 
-report = {
-    "source_file": PurePosixPath(file_key).name,
-    "input_bucket": input_bucket,
-    "input_key": file_key,
-    "line_count": line_count,
-    "word_count": word_count,
-    "status": "SUCCESS"
-}
+### CloudWatch Logging
 
-output_key = f"processed/{file_key}.json"
+The application records:
 
-s3.put_object(
-    Bucket=OUTPUT_BUCKET,
-    Key=output_key,
-    Body=json.dumps(report, indent=4).encode("utf-8"),
-    ContentType="application/json"
-)
-```
+- Lambda invocation start.
+- AWS Lambda request ID.
+- Input bucket and file name.
+- Successful processing messages.
+- Generated report location.
+- Processing errors and traceback details.
 
 The complete implementation is available in [`lambda_function.py`](lambda_function.py).
 
-## 📂 Sample Input and Output
+## 📄 Sample Input and Output
 
 ### Sample Input
 
@@ -245,9 +245,35 @@ Shows the JSON report stored in the S3 output bucket after processing.
 
 ## 🧪 Testing and Verification
 
-The initial end-to-end workflow was tested using text files uploaded to the input S3 bucket.
+The project was tested through local automated tests and actual AWS integration.
 
-The following operations were verified:
+### Automated Tests
+
+The test suite is implemented in `test_validation.py`.
+
+Run the tests locally using:
+
+```bash
+python -m unittest test_validation -v
+```
+
+The local tests use mocked AWS interactions, so they do not require actual S3 uploads or Lambda invocations.
+
+| Test Case | Expected Behaviour | Result |
+|---|---|---|
+| Empty event | Return without processing | Passed |
+| Missing S3 object details | Raise a validation error | Passed |
+| Unsupported file type (`.pdf`) | Reject the file | Passed |
+| Invalid UTF-8 content | Raise a clear encoding error | Passed |
+| Valid text file | Generate the correct JSON report | Passed |
+
+**Automated test result: 5/5 tests passed.**
+
+### AWS Integration Testing
+
+The deployed application was also tested using actual S3 uploads.
+
+Verified workflow:
 
 - [x] Uploading a `.txt` file to the input bucket.
 - [x] Automatic Lambda invocation through an S3 event notification.
@@ -257,13 +283,24 @@ The following operations were verified:
 - [x] Storing the generated report in the output bucket.
 - [x] Verifying successful Lambda execution through CloudWatch Logs.
 - [x] Confirming the generated JSON report in S3.
+- [x] Testing exception handling using a malformed manual Lambda test event.
 
-## 📁 Repository Structure
+**Verified AWS processing examples:**
+
+| Test file | Lines | Words | Status |
+|---|---:|---:|---|
+| `employee_report_sample.txt` | 4 | 12 | SUCCESS |
+| `employee_report_error_handling_test.txt` | 3 | 10 | SUCCESS |
+
+The malformed manual Lambda test also confirmed that exceptions are logged with traceback information and failed invocations are reported correctly.
+
+## 📂 Repository Structure
 
 ```text
 serverless-file-processor/
 │
 ├── lambda_function.py
+├── test_validation.py
 ├── README.md
 ├── .gitignore
 │
@@ -282,30 +319,29 @@ serverless-file-processor/
         └── generated-json-report.png
 ```
 
-## 🚧 Future Enhancements
+## 🚀 Future Enhancements
 
-The current implementation demonstrates the basic end-to-end workflow. The following improvements are planned:
+The following improvements can extend the current implementation:
 
-- [ ] Add robust exception handling and meaningful error messages.
-- [ ] Validate file types and handle invalid file encodings.
 - [ ] Handle empty files explicitly.
 - [ ] Implement idempotency to safely handle duplicate S3 notifications.
-- [ ] Improve failure handling and retry strategies.
+- [ ] Improve failure handling with configurable retry strategies.
 - [ ] Configure CloudWatch metrics and alarms.
-- [ ] Add automated unit tests for the processing logic.
 - [ ] Provision AWS infrastructure using Terraform.
-- [ ] Improve deployment automation through a CI/CD pipeline.
+- [ ] Introduce CI/CD automation for deployment.
+- [ ] Explore dead-letter queues for failed asynchronous processing.
 
-## 💡 Key Learning Outcomes
+## 🎓 Key Learning Outcomes
 
 Through this project, I gained practical experience with:
 
 - AWS serverless computing using Lambda.
 - Event-driven architecture using S3 notifications.
 - S3 object operations using Python and Boto3.
-- IAM execution roles and least-privilege permissions.
+- IAM execution roles and access permissions.
+- Input validation and exception handling.
+- Automated testing using Python `unittest` and mocking.
 - CloudWatch logging and troubleshooting.
-- AWS resource configuration and integration.
 - Building and documenting an end-to-end cloud project.
 
 ## 👩‍💻 Author
